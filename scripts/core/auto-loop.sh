@@ -43,6 +43,9 @@ CONSENSUS_FILE="$PROJECT_DIR/memories/consensus.md"
 PROMPT_FILE="$PROJECT_DIR/PROMPT.md"
 PID_FILE="$PROJECT_DIR/.auto-loop.pid"
 STATE_FILE="$PROJECT_DIR/.auto-loop-state"
+MATTERS_STATE_FILE="$PROJECT_DIR/.matters/auto-company.json"
+RECONCILE_SCRIPT="$PROJECT_DIR/scripts/core/reconcile-matters-beads.py"
+RENDER_CONSENSUS_SCRIPT="$PROJECT_DIR/scripts/core/render-consensus.py"
 
 # Loop settings (all overridable via env vars)
 ENGINE="${ENGINE:-claude}"
@@ -220,10 +223,11 @@ rotate_logs() {
 cleanup_accidental_root_artifacts() {
     local removed=0
     local removed_names=""
-    local f base
+    local f base legacy_scope_prefix
 
     # Known accidental artifacts caused by malformed shell redirections in generated commands.
-    for f in "$PROJECT_DIR"/=* "$PROJECT_DIR"/口径说明*; do
+    legacy_scope_prefix=$(printf '\345\217\243\345\276\204\350\257\264\346\230\216')
+    for f in "$PROJECT_DIR"/=* "$PROJECT_DIR"/"$legacy_scope_prefix"*; do
         [ -f "$f" ] || continue
         if [ ! -s "$f" ]; then
             rm -f "$f"
@@ -253,6 +257,82 @@ restore_consensus() {
         cp "$CONSENSUS_FILE.bak" "$CONSENSUS_FILE"
         log "Consensus restored from backup after failed cycle"
     fi
+}
+
+reconcile_matter_batch() {
+    local batch_file="$1"
+
+    if [ ! -f "$RECONCILE_SCRIPT" ]; then
+        return 1
+    fi
+
+    if ! python3 "$RECONCILE_SCRIPT" --state "$MATTERS_STATE_FILE" --json > "$batch_file"; then
+        rm -f "$batch_file"
+        return 1
+    fi
+
+    return 0
+}
+
+render_consensus_from_state() {
+    if [ ! -f "$RENDER_CONSENSUS_SCRIPT" ]; then
+        return 1
+    fi
+
+    python3 "$RENDER_CONSENSUS_SCRIPT" --state "$MATTERS_STATE_FILE" --output "$CONSENSUS_FILE"
+}
+
+build_matter_batch_prompt() {
+    local batch_file="$1"
+
+    python3 - "$batch_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+batch_path = Path(sys.argv[1])
+data = json.loads(batch_path.read_text(encoding="utf-8"))
+selected = data.get("selected_matter")
+ready = data.get("ready_beads") or []
+false_conditions = data.get("false_conditions") or []
+fallback_reason = data.get("fallback_reason")
+
+if not selected or not ready:
+    if fallback_reason:
+        print(f"Fallback reason: {fallback_reason}")
+    sys.exit(1)
+
+lines = [
+    "## Matter-Scoped Batch (authoritative state)",
+    "",
+    f"Selected matter: `{selected}`",
+    f"Matter title: {data.get('selected_title') or selected}",
+    "",
+    "False actionable conditions:",
+]
+for condition in false_conditions:
+    lines.append(f"- {condition}")
+
+lines.extend(["", "Assigned bead batch:"])
+for issue in ready:
+    acceptance = issue.get("acceptance_criteria", "(missing acceptance criteria)")
+    lines.append(f"- `{issue['id']}` {issue['title']}")
+    lines.append(f"  Acceptance: {acceptance}")
+    lines.append(f"  Supports: {issue.get('condition', 'unspecified condition')}")
+
+lines.extend(
+    [
+        "",
+        "Execution rules:",
+        "- Work this batch as far as practical in this run.",
+        "- Update every worked bead with evidence, verification, blockers, and follow-up beads.",
+        "- Workers may update Beads only. Do not mark Matter conditions true directly.",
+        "- Preserve existing behavior outside the assigned batch.",
+    ]
+)
+
+print("\n".join(lines))
+PY
 }
 
 validate_consensus() {
@@ -647,10 +727,29 @@ while true; do
     backup_consensus
     gitignore_snapshot=$(snapshot_gitignore)
 
+    batch_file=$(mktemp)
+    matter_batch_prompt=""
+
+    if reconcile_matter_batch "$batch_file"; then
+        if matter_batch_prompt=$(build_matter_batch_prompt "$batch_file" 2>/dev/null); then
+            log_cycle "$loop_count" "SCOPE" "Loaded matter-scoped bead batch from authoritative state"
+        else
+            matter_batch_prompt=""
+        fi
+    fi
+
+    if ! render_consensus_from_state; then
+        log_cycle "$loop_count" "WARN" "Could not render consensus from Matters + Beads state; using existing consensus file"
+    fi
+
+    rm -f "$batch_file"
+
     # Build prompt with consensus pre-injected
     PROMPT=$(cat "$PROMPT_FILE")
     CONSENSUS=$(cat "$CONSENSUS_FILE" 2>/dev/null || echo "No consensus file found. This is the very first cycle.")
     FULL_PROMPT="$PROMPT
+
+$matter_batch_prompt
 
 ---
 

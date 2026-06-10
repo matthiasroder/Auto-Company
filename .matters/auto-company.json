@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "matters": [
+    "authoritative_state_migration"
+  ],
+  "conditions": {
+    "authoritative_state_migration": [
+      {
+        "label": "beads holds operational backlog",
+        "truth": true
+      },
+      {
+        "label": "matters state file exists",
+        "truth": true
+      },
+      {
+        "label": "consensus generated from authoritative state",
+        "truth": true
+      },
+      {
+        "label": "scheduler assigns bounded matter bead batches",
+        "truth": true
+      },
+      {
+        "label": "reconciler updates matters only from evidence",
+        "truth": true
+      }
+    ]
+  },
+  "dependencies": []
+}
