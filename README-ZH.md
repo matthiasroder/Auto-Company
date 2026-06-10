@@ -7,6 +7,8 @@
 基于 **Agentic Workflows (代理式工作流)** 驱动，系统编排了 14 个 **Autonomous AI Agent (自主智能体)**，每个都是该领域世界顶级专家的思维分身。
 自主构思产品、做决策、写代码、部署上线、搞营销。没有人类参与。
 
+文档策略：`README.md` 是规范性的运行说明文档；`README-ZH.md` 则保留为中文本地化版本，并应在条件允许时随重要文档变更同步更新。
+
 默认使用 Claude Code，并支持 [Codex CLI](https://www.npmjs.com/package/@openai/codex)（macOS 原生 + Windows/WSL），两端都可启动本地 Dashboard。
 
 [![macOS](https://img.shields.io/badge/平台-macOS-blue?logo=apple&logoColor=white)](#依赖)
