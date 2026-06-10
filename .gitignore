@@ -186,3 +186,8 @@ docs/*/*
 # Ignore all memories (keep folder marker only)
 memories/*
 !memories/.gitkeep
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

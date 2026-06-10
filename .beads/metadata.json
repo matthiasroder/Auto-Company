@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "auto_company",
+  "project_id": "2e093ae6-dff8-4d59-bf55-c1a8a799a2ec"
+}
